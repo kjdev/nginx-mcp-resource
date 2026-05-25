@@ -1,0 +1,48 @@
+# nginx-mcp-resource (Introspection mode) docker compose example
+#
+# Prerequisites:
+#   - Write the AS-issued client secret as a single line into ./secrets/rs.secret.
+#   - Ensure the upstream MCP backend is reachable at 127.0.0.1:8080
+#     (override MCP_BACKEND if it lives elsewhere).
+#   - If MCP_INTROSPECT_ENDPOINT is an external FQDN, also set MCP_RESOLVER
+#     (e.g. the in-container DNS 127.0.0.11).
+#
+# Run:
+#   docker compose -f examples/compose.introspect.yml up
+#
+# Assumes TLS termination is handled upstream (ALB / ingress / reverse proxy).
+
+services:
+  mcp-resource:
+    image: nginx-mcp-resource:dev  # build locally: docker build -t nginx-mcp-resource:dev .
+    ports:
+      - "8443:80"
+    environment:
+      # === Auth mode ===
+      MCP_AUTH_MODE: introspect
+      MCP_TLS: "off"
+
+      # === Common required ===
+      MCP_SERVER_NAME: mcp.example.com
+      MCP_CANONICAL_URI: https://mcp.example.com/mcp
+      MCP_METADATA_URI: https://mcp.example.com/.well-known/oauth-protected-resource
+      MCP_AUTHORIZATION_SERVER: https://auth.example.com
+      MCP_REQUIRED_SCOPE: mcp:read
+      MCP_SCOPES_SUPPORTED: mcp:read,mcp:write
+      MCP_BACKEND: host.docker.internal:8080
+
+      # === Introspection mode-specific ===
+      MCP_INTROSPECT_ENDPOINT: https://auth.example.com/oauth2/introspect
+      MCP_CLIENT_ID: mcp-rs
+      MCP_CLIENT_SECRET_FILE: /run/secrets/rs.secret
+
+      # AS is on an external FQDN, so specify a DNS resolver (Docker's default DNS).
+      MCP_RESOLVER: 127.0.0.11
+    secrets:
+      - rs.secret
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+secrets:
+  rs.secret:
+    file: ./secrets/rs.secret

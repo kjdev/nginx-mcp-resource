@@ -1,0 +1,39 @@
+# nginx-mcp-resource (JWT mode) docker compose example
+#
+# Prerequisites:
+#   - Place ./keys/jwks.json locally (your AS's JWKS).
+#   - Ensure the upstream MCP backend is reachable at 127.0.0.1:8080
+#     (override MCP_BACKEND if it lives elsewhere).
+#
+# Run:
+#   docker compose -f examples/compose.jwt.yml up
+#
+# Assumes TLS termination is handled upstream (ALB / ingress / reverse proxy).
+# To terminate TLS in nginx itself, example (MCP_TLS=on + cert mount).
+
+services:
+  mcp-resource:
+    image: nginx-mcp-resource:dev  # build locally: docker build -t nginx-mcp-resource:dev .
+    ports:
+      - "8443:80"
+    environment:
+      # === Auth mode ===
+      MCP_AUTH_MODE: jwt
+      MCP_TLS: "off"
+
+      # === Common required ===
+      MCP_SERVER_NAME: mcp.example.com
+      MCP_CANONICAL_URI: https://mcp.example.com/mcp
+      MCP_METADATA_URI: https://mcp.example.com/.well-known/oauth-protected-resource
+      MCP_AUTHORIZATION_SERVER: https://auth.example.com
+      MCP_REQUIRED_SCOPE: mcp:read
+      MCP_SCOPES_SUPPORTED: mcp:read,mcp:write
+      MCP_BACKEND: host.docker.internal:8080
+
+      # === JWT mode-specific ===
+      MCP_JWT_KEY_FILE: /etc/nginx/keys/jwks.json
+    volumes:
+      - ./keys:/etc/nginx/keys:ro
+    extra_hosts:
+      # Required to resolve host.docker.internal on Linux.
+      - "host.docker.internal:host-gateway"
