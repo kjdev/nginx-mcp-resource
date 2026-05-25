@@ -1,0 +1,5 @@
+# Sandbox produced by `scripts/lint-examples.sh`
+/build/lint/
+
+# Smoke test fixtures generated at runtime
+/test/smoke/fixtures/
