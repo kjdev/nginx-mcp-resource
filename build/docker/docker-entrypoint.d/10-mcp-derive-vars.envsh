@@ -1,0 +1,103 @@
+#!/bin/sh
+# Generate the derived environment variables needed for template expansion.
+#
+# This must run before the later 20-envsubst-on-templates.sh expands every
+# `${MCP_*}`, so the prefix is 1x.
+
+set -eu
+
+die() {
+    echo "[mcp-entrypoint] ERROR: $*" >&2
+    exit 1
+}
+
+# === default for the listen port ==========================================
+if [ -z "${MCP_LISTEN_PORT-}" ]; then
+    case "${MCP_TLS:-off}" in
+        on)  MCP_LISTEN_PORT=443 ;;
+        off) MCP_LISTEN_PORT=80  ;;
+    esac
+fi
+export MCP_LISTEN_PORT
+
+# === defaults for the optional variables ==================================
+# Anything embedded in the templates as ${MCP_*} must be exported, otherwise
+# envsubst replaces it with an empty string and nginx -t fails.
+export MCP_TLS="${MCP_TLS:-off}"
+export MCP_RESOURCE_PATH="${MCP_RESOURCE_PATH:-/mcp}"
+export MCP_BEARER_METHODS_SUPPORTED="${MCP_BEARER_METHODS_SUPPORTED:-header}"
+export MCP_WORKER_PROCESSES="${MCP_WORKER_PROCESSES:-auto}"
+export MCP_INTROSPECT_CACHE_MAX_TTL="${MCP_INTROSPECT_CACHE_MAX_TTL:-60s}"
+
+# === resolver directive ===================================================
+# Emit `resolver <addr>;` only when set; otherwise an empty string (the
+# template line becomes blank).
+if [ -n "${MCP_RESOLVER-}" ]; then
+    export MCP_RESOLVER_DIRECTIVE="resolver $MCP_RESOLVER;"
+else
+    export MCP_RESOLVER_DIRECTIVE=""
+fi
+
+# === JSON-encode the canonical URI (used for the JWT aud comparison) ======
+# auth_jwt_require_claim aud eq <json-quoted-string>; requires this form, so
+# the nginx variable $mcp_canonical_uri_json holds a value like '"https://..."'.
+MCP_CANONICAL_URI_JSON=$(jq -Rn --arg s "$MCP_CANONICAL_URI" '$s') \
+    || die "failed to JSON-encode MCP_CANONICAL_URI"
+export MCP_CANONICAL_URI_JSON
+
+# === regex-escape the required scope ======================================
+# Used in map "~(^|\s)<scope>(\s|$)", so backslash-escape every PCRE
+# metacharacter. Escape one character at a time with individual sed
+# expressions to avoid busybox sed's character-class quirks. The backslash
+# must be escaped first, before any other substitution (otherwise a later
+# `\X` would be double-escaped to `\\X`).
+MCP_REQUIRED_SCOPE_RE=$(
+    printf '%s' "$MCP_REQUIRED_SCOPE" | sed \
+        -e 's/\\/\\\\/g' \
+        -e 's/\./\\./g' \
+        -e 's/\*/\\*/g' \
+        -e 's/\^/\\^/g' \
+        -e 's/\$/\\$/g' \
+        -e 's/+/\\+/g' \
+        -e 's/?/\\?/g' \
+        -e 's/(/\\(/g' \
+        -e 's/)/\\)/g' \
+        -e 's/{/\\{/g' \
+        -e 's/}/\\}/g' \
+        -e 's/|/\\|/g' \
+        -e 's/\[/\\[/g' \
+        -e 's/\]/\\]/g'
+) || die "failed to escape MCP_REQUIRED_SCOPE"
+export MCP_REQUIRED_SCOPE_RE
+
+# === JSON array values for the metadata ===================================
+# Emit compact form (-c) since this is embedded in nginx `return 200 '...'`.
+MCP_AUTHORIZATION_SERVERS_JSON=$(
+    jq -cRn --arg s "$MCP_AUTHORIZATION_SERVER" '[$s]'
+) || die "failed to JSON-encode MCP_AUTHORIZATION_SERVER"
+export MCP_AUTHORIZATION_SERVERS_JSON
+
+# Convert the comma-separated list to a JSON array (empty elements, e.g. from a
+# trailing comma, are dropped so the PRM never advertises an empty scope).
+MCP_SCOPES_SUPPORTED_JSON=$(
+    jq -cRn --arg s "$MCP_SCOPES_SUPPORTED" '$s | split(",") | map(select(length>0))'
+) || die "failed to JSON-encode MCP_SCOPES_SUPPORTED"
+export MCP_SCOPES_SUPPORTED_JSON
+
+MCP_BEARER_METHODS_JSON=$(
+    jq -cRn --arg s "$MCP_BEARER_METHODS_SUPPORTED" '[$s]'
+) || die "failed to JSON-encode MCP_BEARER_METHODS_SUPPORTED"
+export MCP_BEARER_METHODS_JSON
+
+# === hint file for HEALTHCHECK ============================================
+# HEALTHCHECK cannot read PID 1's environment, so pass port / proto to
+# /usr/local/bin/mcp-healthcheck.sh via a file.
+mkdir -p /run
+printf '%s' "$MCP_LISTEN_PORT" > /run/mcp.port
+if [ "${MCP_TLS:-off}" = "on" ]; then
+    printf '%s' "https" > /run/mcp.proto
+else
+    printf '%s' "http"  > /run/mcp.proto
+fi
+
+echo "[mcp-entrypoint] derived: listen=$MCP_LISTEN_PORT scope_re=$MCP_REQUIRED_SCOPE_RE"

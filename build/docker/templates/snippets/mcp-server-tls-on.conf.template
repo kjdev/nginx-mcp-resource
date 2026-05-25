@@ -1,0 +1,5 @@
+# listen config with TLS termination
+listen ${MCP_LISTEN_PORT} ssl;
+http2 on;
+ssl_certificate     ${MCP_SSL_CERT_FILE};
+ssl_certificate_key ${MCP_SSL_CERT_KEY_FILE};

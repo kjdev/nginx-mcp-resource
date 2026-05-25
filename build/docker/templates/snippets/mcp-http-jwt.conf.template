@@ -1,0 +1,11 @@
+# http-level config for JWT mode
+#
+# - auth_jwt_claim_set: expose the scope claim as $jwt_scope
+# - map $jwt_scope $mcp_has_required_scope: output 0/1 for whether it contains
+#   the required scope. The scope in the regex embeds ${MCP_REQUIRED_SCOPE_RE},
+#   already regex-escaped by the entrypoint.
+auth_jwt_claim_set $jwt_scope scope;
+map $jwt_scope $mcp_has_required_scope {
+    default 0;
+    "~(^|\s)${MCP_REQUIRED_SCOPE_RE}(\s|$)" 1;
+}

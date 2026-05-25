@@ -1,0 +1,89 @@
+# nginx.conf template for the nginx-mcp-resource container image
+#
+# nginx:alpine's docker-entrypoint.d/20-envsubst-on-templates.sh expands this
+# file into `/etc/nginx/nginx.conf` via envsubst. Expansion is limited to the
+# `${MCP_*}` form by `NGINX_ENVSUBST_FILTER=^MCP_`, so the nginx variables
+# `$mcp_*` (lowercase) are left untouched.
+
+# The auth modules are always loaded; mode switching is handled by the
+# included snippets.
+load_module /usr/lib/nginx/modules/ngx_http_auth_jwt_module.so;
+load_module /usr/lib/nginx/modules/ngx_http_auth_oauth2_token_module.so;
+
+worker_processes ${MCP_WORKER_PROCESSES};
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    access_log /var/log/nginx/access.log;
+    error_log  /var/log/nginx/error.log;
+
+    sendfile on;
+    keepalive_timeout 65;
+
+    # resolver so nginx can resolve names when the AS is an external FQDN.
+    # When MCP_RESOLVER is unset the entrypoint expands it to an empty string
+    # (disabling the whole line).
+    ${MCP_RESOLVER_DIRECTIVE}
+
+    # === MCP metadata variables ==========================================
+    # nginx variables referenced by conf/mcp-metadata.conf and the 401/403
+    # handlers. Only the value source differs; the form is identical to the
+    # bare nginx setup (examples/).
+    map "" $mcp_canonical_uri               { default "${MCP_CANONICAL_URI}"; }
+    map "" $mcp_canonical_uri_json          { default '${MCP_CANONICAL_URI_JSON}'; }
+    map "" $mcp_metadata_uri                { default "${MCP_METADATA_URI}"; }
+    map "" $mcp_required_scope              { default "${MCP_REQUIRED_SCOPE}"; }
+    map "" $mcp_authorization_servers_json  { default '${MCP_AUTHORIZATION_SERVERS_JSON}'; }
+    map "" $mcp_scopes_supported_json       { default '${MCP_SCOPES_SUPPORTED_JSON}'; }
+    map "" $mcp_bearer_methods_json         { default '${MCP_BEARER_METHODS_JSON}'; }
+
+    # === per-mode http-level config ======================================
+    # claim_set / map $jwt_scope|$oauth2_aud|$oauth2_scope / cache zone, etc.
+    include /etc/nginx/snippets/mcp-http-${MCP_AUTH_MODE}.conf;
+
+    # === Upstream backend ===============================================
+    upstream mcp_backend {
+        server ${MCP_BACKEND};
+    }
+
+    server {
+        server_name ${MCP_SERVER_NAME};
+
+        # listen + (ssl_certificate* when TLS=on)
+        include /etc/nginx/snippets/mcp-server-tls-${MCP_TLS}.conf;
+
+        # mode-specific server-level directives
+        # JWT:        auth_jwt_key_file
+        # Introspect: client_id / client_secret_file + location = /_introspect
+        include /etc/nginx/snippets/mcp-server-${MCP_AUTH_MODE}.conf;
+
+        # RFC 9728 metadata endpoint
+        include /etc/nginx/mcp-conf/mcp-metadata.conf;
+
+        # 401 / 403 challenge handlers (named locations)
+        include /etc/nginx/mcp-conf/mcp-401-handler.conf;
+        include /etc/nginx/mcp-conf/mcp-403-handler.conf;
+
+        # === MCP resource endpoint =======================================
+        location ${MCP_RESOURCE_PATH} {
+            include /etc/nginx/mcp-conf/mcp-resource-${MCP_AUTH_MODE}.conf;
+
+            # Do not pass the token upstream (prevents RFC 8707 token passthrough)
+            proxy_set_header Authorization "";
+            proxy_pass http://mcp_backend;
+        }
+
+        # === health check ================================================
+        location = /healthz {
+            access_log off;
+            default_type text/plain;
+            return 200 "ok\n";
+        }
+    }
+}

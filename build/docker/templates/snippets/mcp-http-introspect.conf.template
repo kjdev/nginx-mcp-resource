@@ -1,0 +1,25 @@
+# http-level config for Introspection mode
+#
+# - client_id / client_secret_file: credentials for the introspect request to
+#   the AS (directives that require http scope)
+# - auth_oauth2_token_claim_set: expose aud / scope as nginx variables
+# - map $oauth2_aud $mcp_aud_ok: 1 only when it exactly matches the canonical URI
+# - map $oauth2_scope $mcp_has_required_scope: 1 only when it contains the required scope
+# - auth_oauth2_token_introspect_cache: allocate the shared zone
+auth_oauth2_token_client_id          ${MCP_CLIENT_ID};
+auth_oauth2_token_client_secret_file ${MCP_CLIENT_SECRET_FILE};
+
+auth_oauth2_token_claim_set $oauth2_aud   aud;
+auth_oauth2_token_claim_set $oauth2_scope scope;
+
+map $oauth2_aud $mcp_aud_ok {
+    default 0;
+    "${MCP_CANONICAL_URI}" 1;
+}
+
+map $oauth2_scope $mcp_has_required_scope {
+    default 0;
+    "~(^|\s)${MCP_REQUIRED_SCOPE_RE}(\s|$)" 1;
+}
+
+auth_oauth2_token_introspect_cache zone=introspect:10m max_ttl=${MCP_INTROSPECT_CACHE_MAX_TTL};

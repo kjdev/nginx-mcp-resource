@@ -1,0 +1,4 @@
+# server-level config for JWT mode
+#
+# JWKS path. nginx-auth-jwt loads the JWKS at startup.
+auth_jwt_key_file ${MCP_JWT_KEY_FILE};

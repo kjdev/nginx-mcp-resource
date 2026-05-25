@@ -1,0 +1,2 @@
+# listen config for when TLS termination is delegated upstream (LB / ingress)
+listen ${MCP_LISTEN_PORT};
