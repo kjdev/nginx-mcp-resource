@@ -1,0 +1,79 @@
+# Host-direct E2E nginx config (introspection mode).
+#
+# Derived from examples/nginx-introspect.conf but stripped down to HTTP for
+# sandbox execution. envsubst-expanded by introspect.sh.
+
+load_module ${JWT_MODULE};
+load_module ${OAUTH2_MODULE};
+
+daemon off;
+worker_processes 1;
+pid ${E2E_DIR}/nginx.pid;
+error_log ${E2E_DIR}/error.log info;
+events {}
+
+http {
+    access_log ${E2E_DIR}/access.log;
+
+    # Override compile-in temp paths so nginx does not try to mkdir under
+    # /var/lib/nginx (sandboxed read-only filesystems lack permission).
+    client_body_temp_path ${E2E_DIR}/tmp/client_body;
+    proxy_temp_path       ${E2E_DIR}/tmp/proxy;
+    fastcgi_temp_path     ${E2E_DIR}/tmp/fastcgi;
+    uwsgi_temp_path       ${E2E_DIR}/tmp/uwsgi;
+    scgi_temp_path        ${E2E_DIR}/tmp/scgi;
+
+    auth_oauth2_token_client_id          ${CLIENT_ID};
+    auth_oauth2_token_client_secret_file ${CLIENT_SECRET_FILE};
+
+    auth_oauth2_token_claim_set $oauth2_aud   aud;
+    auth_oauth2_token_claim_set $oauth2_scope scope;
+
+    map "" $mcp_canonical_uri              { default "${CANONICAL_URI}"; }
+    map "" $mcp_metadata_uri               { default "${METADATA_URI}"; }
+    map "" $mcp_required_scope             { default "${REQUIRED_SCOPE}"; }
+    map "" $mcp_authorization_servers_json { default '["${AUTHORIZATION_SERVER}"]'; }
+    map "" $mcp_scopes_supported_json      { default '["mcp:read","mcp:write"]'; }
+    map "" $mcp_bearer_methods_json        { default '["header"]'; }
+
+    map $oauth2_aud $mcp_aud_ok {
+        default 0;
+        "${CANONICAL_URI}" 1;
+    }
+    map $oauth2_scope $mcp_has_required_scope {
+        default 0;
+        "~(^|\s)mcp:read(\s|$)" 1;
+    }
+
+    auth_oauth2_token_introspect_cache zone=introspect:1m max_ttl=60s;
+
+    upstream mcp_backend {
+        server 127.0.0.1:${BACKEND_PORT};
+    }
+
+    server {
+        listen ${RS_PORT};
+        server_name _;
+
+        # Internal endpoint that proxies to the host-side mock AS.
+        location = /_introspect {
+            internal;
+            proxy_pass ${INTROSPECT_ENDPOINT};
+        }
+
+        include ${PROJECT_DIR}/conf/mcp-metadata.conf;
+        include ${PROJECT_DIR}/conf/mcp-401-handler.conf;
+        include ${PROJECT_DIR}/conf/mcp-403-handler.conf;
+
+        location = /healthz {
+            access_log off;
+            return 200 'ok';
+        }
+
+        location /mcp {
+            include ${PROJECT_DIR}/conf/mcp-resource-introspect.conf;
+            proxy_set_header Authorization "";
+            proxy_pass http://mcp_backend;
+        }
+    }
+}
