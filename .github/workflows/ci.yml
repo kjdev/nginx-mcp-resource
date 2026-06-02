@@ -1,0 +1,124 @@
+name: CI
+
+# lint + e2e + smoke always run; prove (Test::Nginx) is opt-in on manual dispatch only.
+# Both reuse the production Dockerfile image instead of maintaining a dedicated
+# test image (the production image already ships both modules plus an
+# ABI-matched nginx).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_prove:
+        description: 'Run the Test::Nginx (prove) suite as well'
+        type: boolean
+        default: false
+
+permissions: {}
+
+env:
+  DOCKER_BUILDKIT: '1'
+  IMAGE: nginx-mcp-resource:dev
+  JWT_MODULE: /usr/lib/nginx/modules/ngx_http_auth_jwt_module.so
+  OAUTH2_MODULE: /usr/lib/nginx/modules/ngx_http_auth_oauth2_token_module.so
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (lint + e2e + smoke)
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          set-safe-directory: true
+          token: ${{ github.token }}
+
+      - name: Build production image
+        run: docker build -t "$IMAGE" .
+
+      # Validate examples/nginx-*.conf with nginx -t. The load_module paths in
+      # the examples match /usr/lib/nginx/modules inside the production image, so
+      # the modules resolve as-is. lint-examples.sh needs bash + openssl, so add
+      # just those two to the image before running (the sandbox is isolated under
+      # /tmp/lint and the repo is mounted read-only).
+      - name: Lint examples (nginx -t inside the image)
+        run: |
+          docker run --rm \
+            -v "$PWD:/work:ro" -w /work \
+            -e PROJECT_DIR=/work \
+            -e LINT_DIR=/tmp/lint \
+            -e NGINX_BIN=/usr/sbin/nginx \
+            -e JWT_MODULE="$JWT_MODULE" \
+            -e OAUTH2_MODULE="$OAUTH2_MODULE" \
+            --init \
+            "$IMAGE" \
+            sh -c 'apk add --no-cache bash openssl >/dev/null && bash scripts/lint-examples.sh'
+
+      # End-to-end check against the shipped image: host-side Python mocks
+      # (echo backend + mock AS) and minted HS256 JWTs exercise the full
+      # acceptance criteria over HTTP -- success path (valid token -> 200 +
+      # upstream body), no Authorization forwarding, exactly one
+      # WWW-Authenticate, and the aud/scope/expiry failure modes. The mock
+      # servers are stdlib-only Python, so no pip install is needed; the
+      # container reaches them via host.docker.internal:host-gateway.
+      - name: E2E test (real tokens against the running container)
+        run: ./test/e2e/run-e2e.sh all
+
+      # Start the production image and verify it over curl (jwt + introspect).
+      # Unlike the e2e step this also covers the TLS=on path. run-smoke.sh runs
+      # entirely on the host (docker + curl + openssl).
+      - name: Smoke test (curl against the running container)
+        run: ./test/smoke/run-smoke.sh all
+
+  prove:
+    name: prove (Test::Nginx)
+    permissions:
+      contents: read
+    # Opt-in job that runs only on manual dispatch (workflow_dispatch) with run_prove=true.
+    if: github.event_name == 'workflow_dispatch' && inputs.run_prove
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          set-safe-directory: true
+          token: ${{ github.token }}
+
+      - name: Build production image
+        run: docker build -t "$IMAGE" .
+
+      # Install perl + Test::Nginx::Socket into the production image at job time
+      # and run the full prove suite under t/. Building XS deps needs
+      # build-base/perl-dev. Keeping the costly perl toolchain confined here keeps
+      # it out of the always-on job.
+      - name: Run Test::Nginx suite inside the image
+        run: |
+          docker run --rm \
+            -v "$PWD:/work:ro" -w /work \
+            -e TEST_NGINX_BINARY=/usr/sbin/nginx \
+            -e TEST_NGINX_LOAD_MODULES="$JWT_MODULE $OAUTH2_MODULE" \
+            -e TEST_NGINX_SERVROOT=/tmp/servroot \
+            -e TEST_NGINX_HTML_DIR=/tmp/servroot/html \
+            --init \
+            "$IMAGE" \
+            sh -c '
+              apk add --no-cache perl perl-app-cpanminus perl-dev make build-base openssl bash >/dev/null &&
+              cpanm --notest --quiet Test::Nginx::Socket > /dev/null &&
+              mkdir -p /tmp/servroot/html &&
+              prove -r t
+            '
