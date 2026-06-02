@@ -1,0 +1,2 @@
+# Do not commit generated artifacts (keys / JWKS).
+keys/

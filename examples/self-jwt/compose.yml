@@ -1,0 +1,54 @@
+# Self-issued JWT demo (no-AS setup)
+#
+# A minimal setup that has nginx-mcp-resource (JWT mode) validate a JWT you
+# signed yourself with tokens.py, without standing up an authorization server.
+#
+# Prerequisites:
+#   1) Build the image:  docker build -t nginx-mcp-resource:dev .   (repo root)
+#   2) Generate keys + JWKS:  python tokens.py keygen                (this dir)
+#
+# Run:
+#   docker compose -f examples/self-jwt/compose.yml up
+#
+# Note: MCP_AUTHORIZATION_SERVER is only a nominal value shown in metadata.
+#       This setup does not use the interactive OAuth flow (tokens are supplied
+#       by hand).
+
+services:
+  # Stub standing in for a real MCP server. Replace it in production.
+  mcp-backend:
+    image: python:3.12-alpine
+    working_dir: /app
+    volumes:
+      - ./backend:/app:ro
+    command: ["python", "stub.py"]
+    expose:
+      - "8080"
+
+  # OAuth 2.1 resource server (this project).
+  mcp-resource:
+    image: nginx-mcp-resource:dev
+    depends_on:
+      - mcp-backend
+    ports:
+      - "8080:80"
+    environment:
+      # === Auth mode ===
+      MCP_AUTH_MODE: jwt
+      MCP_TLS: "off"
+
+      # === Common required ===
+      MCP_SERVER_NAME: localhost
+      MCP_CANONICAL_URI: http://localhost:8080/mcp
+      MCP_METADATA_URI: http://localhost:8080/.well-known/oauth-protected-resource
+      # No AS exists, but env validation requires this, so use a nominal value.
+      MCP_AUTHORIZATION_SERVER: https://self-jwt-demo.local
+      MCP_REQUIRED_SCOPE: mcp:read
+      MCP_SCOPES_SUPPORTED: mcp:read,mcp:write
+      MCP_BACKEND: mcp-backend:8080
+
+      # === JWT mode-specific ===
+      MCP_JWT_KEY_FILE: /etc/nginx/keys/jwks.json
+    volumes:
+      # Mount only the public JWKS (never the private key).
+      - ./keys/jwks.json:/etc/nginx/keys/jwks.json:ro
