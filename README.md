@@ -147,6 +147,7 @@ Taskfile.yml                  go-task task definitions
 
 End-user reference documentation lives under [`docs/`](docs/):
 
+- [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) — Beginner-friendly worked example (Keycloak AS + Claude Code + a runnable Docker Compose stack).
 - [`docs/INSTALL.md`](docs/INSTALL.md) — Container and bare-nginx installation, including dependent-module builds.
 - [`docs/EXAMPLES.md`](docs/EXAMPLES.md) — JWT and introspection patterns for bare nginx and Docker Compose.
 - [`docs/SECURITY.md`](docs/SECURITY.md) — Mandatory operational requirements (HTTPS, audience binding, token passthrough, …).
