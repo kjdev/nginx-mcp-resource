@@ -69,7 +69,7 @@ Because `return` runs in REWRITE, the ACCESS-phase `auth_jwt` /
 wrong — auth never fires even for "should pass" requests.
 
 **Fix**: use `proxy_pass http://<backend>;` so the content runs in the
-CONTENT phase. All tests under `t/` follow this pattern. (Discovered while
+CONTENT phase. All tests under `test/prove/` follow this pattern. (Discovered while
 validating V1.)
 
 ### Symptom: requests that should return 403 return 401
@@ -187,7 +187,7 @@ In the container image these are generated automatically from
 
 **Fix**: declare it explicitly inside `location /mcp { ... }`. The
 `conf/mcp-resource-*.conf` snippets themselves do not include it, so the
-user has to add it. `t/07-no-passthrough.t` verifies the behaviour.
+user has to add it. `test/prove/07-no-passthrough.t` verifies the behaviour.
 
 ## Introspection-specific
 

@@ -136,7 +136,7 @@ build/docker/                 Templates and entrypoint hooks used in the contain
   templates/                  Copied to /etc/nginx/templates/ (envsubst targets)
   docker-entrypoint.d/        Copied to /docker-entrypoint.d/ (startup hooks)
 docs/                         End-user reference documentation (see Documentation below)
-t/                            Test::Nginx::Socket integration tests (Perl prove)
+test/prove/                   Test::Nginx::Socket integration tests (Perl prove)
 test/smoke/                   curl-based smoke tests for the container image
 scripts/lint-examples.sh      Runs `nginx -t` against examples/*.conf
 Dockerfile                    Container image build definition
@@ -169,7 +169,7 @@ End-user reference documentation lives under [`docs/`](docs/):
 
 ```sh
 task lint           # `nginx -t` against examples/*.conf
-task test           # `prove` over t/*.t
+task test           # `prove` over test/prove/*.t
 task docker:build   # docker build -t nginx-mcp-resource:dev .
 task docker:smoke   # curl-based smoke test (mode=jwt|introspect|all)
 ```

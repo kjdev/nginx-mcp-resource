@@ -103,7 +103,7 @@ jobs:
         run: docker build -t "$IMAGE" .
 
       # Install perl + Test::Nginx::Socket into the production image at job time
-      # and run the full prove suite under t/. Building XS deps needs
+      # and run the full prove suite under test/prove/. Building XS deps needs
       # build-base/perl-dev. Keeping the costly perl toolchain confined here keeps
       # it out of the always-on job.
       - name: Run Test::Nginx suite inside the image
@@ -120,5 +120,5 @@ jobs:
               apk add --no-cache perl perl-app-cpanminus perl-dev make build-base openssl bash >/dev/null &&
               cpanm --notest --quiet Test::Nginx::Socket > /dev/null &&
               mkdir -p /tmp/servroot/html &&
-              prove -r t
+              prove -r test/prove
             '

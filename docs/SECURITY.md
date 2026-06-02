@@ -43,7 +43,7 @@ the upstream MCP backend verbatim.
   the surrounding `location /mcp { ... }` block.
 - The container image applies it automatically via
   `build/docker/templates/snippets/mcp-server-{jwt,introspect}.conf.template`.
-- The behaviour is exercised by `t/07-no-passthrough.t`.
+- The behaviour is exercised by `test/prove/07-no-passthrough.t`.
 
 ## 4. Verify the `aud` issuance policy in advance
 

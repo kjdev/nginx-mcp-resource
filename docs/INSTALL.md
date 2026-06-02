@@ -243,13 +243,13 @@ dummy JWKS, dummy client secret). See
 
 ### B.6 Integration tests (optional)
 
-`Test::Nginx::Socket`-based integration tests live under `t/`. They require
+`Test::Nginx::Socket`-based integration tests live under `test/prove/`. They require
 Perl and the relevant CPAN modules, but are recommended when modifying the
 snippets.
 
 ```sh
-task test           # run prove over t/
-task test file=t/02-no-token.t verbose=1   # single test
+task test           # run prove over test/prove/
+task test file=test/prove/02-no-token.t verbose=1   # single test
 ```
 
 `Taskfile.yml` expects `TEST_NGINX_LOAD_MODULES` to point at locally built

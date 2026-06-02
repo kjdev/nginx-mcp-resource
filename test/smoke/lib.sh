@@ -125,7 +125,7 @@ run_common_assertions() {
 # A syntactically bogus bearer is rejected locally against the JWKS, so 401 is
 # returned without any AS round-trip. This does not hold in introspect mode
 # (that needs a reachable introspection endpoint), so it lives here rather than
-# in run_common_assertions. Introspection behaviour is covered by t/09-13.
+# in run_common_assertions. Introspection behaviour is covered by test/prove/09-13.
 assert_bogus_token_rejected() {
     proto=$1
     port=$2
