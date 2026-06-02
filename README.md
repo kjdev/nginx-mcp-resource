@@ -13,8 +13,6 @@ OAuth 2.1 Resource Server.
   [RFC 8707](https://datatracker.ietf.org/doc/html/rfc8707) audience
   binding.
 
-For Japanese documentation see [`docs/README.ja.md`](docs/README.ja.md).
-
 ## Two ways to deploy
 
 ### A. Container image + environment variables
@@ -127,22 +125,6 @@ http {
 | `MCP_CLIENT_SECRET_FILE` | Path to the client secret file (required). Passing the secret through an environment variable is unsupported. |
 | `MCP_INTROSPECT_CACHE_MAX_TTL` | Default `60s` |
 
-## Repository layout
-
-```
-conf/                         Configuration snippets for bare nginx (include these)
-examples/                     Full nginx configs for bare nginx and docker-compose recipes
-build/docker/                 Templates and entrypoint hooks used in the container image
-  templates/                  Copied to /etc/nginx/templates/ (envsubst targets)
-  docker-entrypoint.d/        Copied to /docker-entrypoint.d/ (startup hooks)
-docs/                         End-user reference documentation (see Documentation below)
-test/prove/                   Test::Nginx::Socket integration tests (Perl prove)
-test/smoke/                   curl-based smoke tests for the container image
-scripts/lint-examples.sh      Runs `nginx -t` against examples/*.conf
-Dockerfile                    Container image build definition
-Taskfile.yml                  go-task task definitions
-```
-
 ## Documentation
 
 End-user reference documentation lives under [`docs/`](docs/):
@@ -152,24 +134,42 @@ End-user reference documentation lives under [`docs/`](docs/):
 - [`docs/EXAMPLES.md`](docs/EXAMPLES.md) — JWT and introspection patterns for bare nginx and Docker Compose.
 - [`docs/SECURITY.md`](docs/SECURITY.md) — Mandatory operational requirements (HTTPS, audience binding, token passthrough, …).
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — Common pitfalls with causes and fixes.
-- [`docs/README.ja.md`](docs/README.ja.md) — Japanese translation of this README.
+- [`docs/E2E_INSPECTOR.md`](docs/E2E_INSPECTOR.md) — End-to-end verification with the MCP Inspector.
 
 ## Development
 
 ### Requirements
 
-- Docker (image build + smoke tests).
-- nginx (for bare-nginx verification).
-- Perl + `Test::Nginx::Socket` (`prove`-based test runs).
+- Docker (image build, smoke and e2e tests).
+- Python 3 (e2e mock servers; standard library only).
+- nginx + Perl + `Test::Nginx::Socket` (for the `prove` suite against host nginx).
 - Built `.so` files of [`nginx-auth-jwt`](https://github.com/kjdev/nginx-auth-jwt)
-  and [`nginx-auth-oauth2-token`](https://github.com/kjdev/nginx-auth-oauth2-token)
-  (needed by `task test` / `task lint` against host nginx).
+  and [`nginx-auth-oauth2-token`](https://github.com/kjdev/nginx-auth-oauth2-token),
+  needed by `scripts/lint-examples.sh` and the `prove` suite when run against
+  host nginx.
 
-### Tasks
+### Tests
 
 ```sh
-task lint           # `nginx -t` against examples/*.conf
-task test           # `prove` over test/prove/*.t
-task docker:build   # docker build -t nginx-mcp-resource:dev .
-task docker:smoke   # curl-based smoke test (mode=jwt|introspect|all)
+# Build the image (smoke and e2e run against it).
+docker build -t nginx-mcp-resource:dev .
+
+# Validate the example configs with `nginx -t`.
+scripts/lint-examples.sh
+
+# curl-based smoke test against the image (jwt + introspect, both TLS modes).
+./test/smoke/run-smoke.sh all
+
+# End-to-end test: minted tokens + stdlib-Python mock AS/backend.
+./test/e2e/run-e2e.sh all
+
+# Test::Nginx::Socket integration suite (point it at the built modules first).
+TEST_NGINX_LOAD_MODULES="/path/to/ngx_http_auth_jwt_module.so /path/to/ngx_http_auth_oauth2_token_module.so" \
+  prove -r test/prove
 ```
+
+### Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs lint + e2e + smoke
+on every push and pull request, reusing the production image. The Test::Nginx
+(`prove`) suite is an opt-in job triggered manually via `workflow_dispatch`.
