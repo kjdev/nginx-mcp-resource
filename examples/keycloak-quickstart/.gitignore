@@ -1,0 +1,2 @@
+# No generated artifacts live here, but ignore local experiment traces.
+*.log

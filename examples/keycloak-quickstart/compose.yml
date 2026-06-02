@@ -1,0 +1,80 @@
+# Keycloak quickstart (introspection mode)
+#
+# Cast:
+#   keycloak     ... Authorization Server (AS). Imports realm-mcp.json at startup.
+#   mcp-backend  ... Stub standing in for a real MCP server.
+#   mcp-resource ... This project (RS). Delegates token validation to Keycloak
+#                    via introspection.
+#
+# Prerequisite:
+#   docker build -t nginx-mcp-resource:dev .   (once, at the repo root)
+#
+# Run:
+#   docker compose -f examples/keycloak-quickstart/compose.yml up -d --wait
+#
+# Published ports:
+#   - http://localhost:18080  Keycloak (admin: admin / admin)
+#   - http://localhost:8080   MCP resource server (protected)
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: true
+      # Pin the issuer to the host-facing URL. Without this, the token `iss`
+      # varies by access path (browser=localhost:18080 / RS=keycloak:8080),
+      # so the RS introspection sees an issuer mismatch -> active:false -> 401.
+      KC_HOSTNAME: http://localhost:18080
+      # The RS introspects from keycloak:8080 (inside the container network),
+      # so allow a backchannel host different from the frontend.
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+    volumes:
+      - ./realm-mcp.json:/opt/keycloak/data/import/realm-mcp.json:ro
+    ports:
+      - "18080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /health/ready HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n' >&3; grep 'HTTP/1.1 200 OK' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mcp-backend:
+    image: python:3.12-alpine
+    working_dir: /app
+    volumes:
+      - ./backend:/app:ro
+    command: ["python", "stub.py"]
+    expose:
+      - "8080"
+
+  mcp-resource:
+    image: nginx-mcp-resource:dev
+    depends_on:
+      - keycloak
+      - mcp-backend
+    ports:
+      - "8080:80"
+    environment:
+      # === Auth mode ===
+      MCP_AUTH_MODE: introspect
+      MCP_TLS: "off"
+
+      # === Common required ===
+      MCP_SERVER_NAME: localhost
+      MCP_CANONICAL_URI: http://localhost:8080/mcp
+      MCP_METADATA_URI: http://localhost:8080/.well-known/oauth-protected-resource
+      MCP_AUTHORIZATION_SERVER: http://localhost:18080/realms/mcp
+      MCP_REQUIRED_SCOPE: mcp:read
+      MCP_SCOPES_SUPPORTED: mcp:read,mcp:write
+      MCP_BACKEND: mcp-backend:8080
+
+      # === Introspection mode-specific ===
+      # RS -> Keycloak runs inside the container network (server-to-server).
+      MCP_INTROSPECT_ENDPOINT: http://keycloak:8080/realms/mcp/protocol/openid-connect/token/introspect
+      MCP_CLIENT_ID: mcp-rs
+      MCP_CLIENT_SECRET_FILE: /run/secrets/rs.secret
+    volumes:
+      - ./secrets/rs.secret:/run/secrets/rs.secret:ro
