@@ -82,11 +82,8 @@ itself. This example bundles both in compose so it runs immediately.
 ## Quickstart
 
 ```sh
-# 1) Build the RS image (once, at the repo root)
-docker build -t nginx-mcp-resource:dev .
-
-# 2) Start the stack (keycloak + backend + RS)
-docker compose -f examples/keycloak-quickstart/compose.yml up -d --wait
+# Start the stack (keycloak + backend + RS)
+docker compose -f examples/keycloak-quickstart/compose.yml up -d --wait --build
 ```
 
 What gets published:
