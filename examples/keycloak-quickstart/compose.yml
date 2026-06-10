@@ -6,11 +6,8 @@
 #   mcp-resource ... This project (RS). Delegates token validation to Keycloak
 #                    via introspection.
 #
-# Prerequisite:
-#   docker build -t nginx-mcp-resource:dev .   (once, at the repo root)
-#
 # Run:
-#   docker compose -f examples/keycloak-quickstart/compose.yml up -d --wait
+#   docker compose -f examples/keycloak-quickstart/compose.yml up -d --wait --build
 #
 # Published ports:
 #   - http://localhost:18080  Keycloak (admin: admin / admin)
@@ -51,7 +48,9 @@ services:
       - "8080"
 
   mcp-resource:
-    image: nginx-mcp-resource:dev
+    build:
+      context: ../..
+      dockerfile: ./Dockerfile
     depends_on:
       - keycloak
       - mcp-backend

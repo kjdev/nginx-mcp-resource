@@ -8,7 +8,7 @@
 #   2) Generate keys + JWKS:  python tokens.py keygen                (this dir)
 #
 # Run:
-#   docker compose -f examples/self-jwt/compose.yml up
+#   docker compose -f examples/self-jwt/compose.yml up --build
 #
 # Note: MCP_AUTHORIZATION_SERVER is only a nominal value shown in metadata.
 #       This setup does not use the interactive OAuth flow (tokens are supplied
@@ -27,7 +27,9 @@ services:
 
   # OAuth 2.1 resource server (this project).
   mcp-resource:
-    image: nginx-mcp-resource:dev
+    build:
+      context: ../..
+      dockerfile: ./Dockerfile
     depends_on:
       - mcp-backend
     ports:

@@ -6,14 +6,16 @@
 #     (override MCP_BACKEND if it lives elsewhere).
 #
 # Run:
-#   docker compose -f examples/compose.jwt.yml up
+#   docker compose -f examples/compose.jwt.yml up --build
 #
 # Assumes TLS termination is handled upstream (ALB / ingress / reverse proxy).
 # To terminate TLS in nginx itself, example (MCP_TLS=on + cert mount).
 
 services:
   mcp-resource:
-    image: nginx-mcp-resource:dev  # build locally: docker build -t nginx-mcp-resource:dev .
+    build:
+      context: ..
+      dockerfile: ./Dockerfile
     ports:
       - "8443:80"
     environment:

@@ -8,13 +8,15 @@
 #     (e.g. the in-container DNS 127.0.0.11).
 #
 # Run:
-#   docker compose -f examples/compose.introspect.yml up
+#   docker compose -f examples/compose.introspect.yml up --build
 #
 # Assumes TLS termination is handled upstream (ALB / ingress / reverse proxy).
 
 services:
   mcp-resource:
-    image: nginx-mcp-resource:dev  # build locally: docker build -t nginx-mcp-resource:dev .
+    build:
+      context: ..
+      dockerfile: ./Dockerfile
     ports:
       - "8443:80"
     environment:
