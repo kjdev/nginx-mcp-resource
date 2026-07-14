@@ -27,10 +27,10 @@ printf 'lint-secret\n' > "$LINT_DIR/secrets/rs.secret"
 rewrite() {
     local src=$1
     local dst=$2
-    # The introspection example points proxy_pass at a placeholder AS host
-    # (auth.example.com) which `nginx -t` tries to resolve and fails on. We
-    # rewrite it to a loopback URL purely to make `-t` resolve-clean; the
-    # check exercises directive grammar, not actual reachability.
+    # The introspection example's /_introspect proxy_pass target is routed
+    # through a `set` variable (see examples/nginx-introspect.conf), so
+    # `nginx -t` no longer resolves the placeholder AS host at config-load
+    # time and doesn't need a loopback rewrite here.
     sed \
         -e "s|/etc/nginx/certs|$LINT_DIR/certs|g" \
         -e "s|/etc/nginx/keys|$LINT_DIR/keys|g" \
@@ -38,7 +38,6 @@ rewrite() {
         -e "s|/usr/lib/nginx/modules/ngx_http_auth_jwt_module.so|$JWT_MODULE|g" \
         -e "s|/usr/lib/nginx/modules/ngx_http_auth_oauth2_token_module.so|$OAUTH2_MODULE|g" \
         -e "s|include conf/|include $PROJECT_DIR/conf/|g" \
-        -e "s|https://auth.example.com/oauth2/introspect|http://127.0.0.1:65532/|g" \
         -e "s|^http {|http {\n    access_log $LINT_DIR/logs/access.log;|" \
         -e 's|listen 443 ssl;|listen 8443 ssl;|' \
         "$src" > "$dst"

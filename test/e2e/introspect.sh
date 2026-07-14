@@ -15,8 +15,15 @@ backend_log="$E2E_LOG_DIR/e2e-introspect-backend.log"
 as_log="$E2E_LOG_DIR/e2e-introspect-as.log"
 rs_log="$E2E_LOG_DIR/e2e-introspect-rs.log"
 
-# Mock AS is reachable from the RS container via host-gateway.
-RS_INTROSPECT_ENDPOINT="http://host.docker.internal:${AS_PORT}/introspect"
+# /_introspect proxy_passes through a variable (see mcp-server-introspect
+# .conf.template), so resolution happens at request time via the `resolver`
+# directive and never consults /etc/hosts. host.docker.internal is only an
+# /etc/hosts alias (added below via --add-host), not a real DNS name, so it
+# is unresolvable here; use the bridge gateway IP directly instead, which
+# nginx recognizes as a literal address and proxies to without invoking the
+# resolver at all.
+GATEWAY_IP=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
+RS_INTROSPECT_ENDPOINT="http://${GATEWAY_IP}:${AS_PORT}/introspect"
 
 echo "[introspect] starting backend on :$BACKEND_PORT..."
 start_backend "$BACKEND_PORT" "$backend_log"
@@ -42,7 +49,6 @@ cid=$(docker run -d --rm -p "$RS_PORT:80" \
     -e "MCP_INTROSPECT_ENDPOINT=$RS_INTROSPECT_ENDPOINT" \
     -e MCP_CLIENT_ID=mcp-e2e \
     -e MCP_CLIENT_SECRET_FILE=/run/secrets/rs.secret \
-    -e MCP_RESOLVER=127.0.0.11 \
     -v "$FIXTURES/secrets/rs.secret:/run/secrets/rs.secret:ro" \
     "$IMAGE")
 CIDS="$CIDS $cid"
