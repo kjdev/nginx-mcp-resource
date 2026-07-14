@@ -6,8 +6,9 @@
 # and templates under /etc/nginx/templates/, then runs as the MCP Resource
 # Server.
 
-FROM ghcr.io/kjdev/nginx-auth-jwt/nginx:0.14.0 AS nginx-auth-jwt
-FROM ghcr.io/kjdev/nginx-auth-oauth2-token/nginx:0.4.1 AS nginx-auth-oauth2-token
+FROM ghcr.io/kjdev/nginx-auth-jwt/nginx:0.14.2 AS nginx-auth-jwt
+FROM ghcr.io/kjdev/nginx-auth-oauth2-token/nginx:0.5.0 AS nginx-auth-oauth2-token
+FROM ghcr.io/kjdev/nginx-ratelimit/nginx:0.2.1 AS nginx-ratelimit
 
 FROM nginx:alpine
 
@@ -28,6 +29,12 @@ COPY --from=nginx-auth-jwt \
 COPY --from=nginx-auth-oauth2-token \
     /usr/lib/nginx/modules/ngx_http_auth_oauth2_token_module.so \
     /usr/lib/nginx/modules/ngx_http_auth_oauth2_token_module.so
+# nginx-ratelimit is opt-in (MCP_RATELIMIT_ENABLED); the .so is always copied
+# but only load_module'd when enabled (see nginx.conf.template), so its
+# presence here is harmless when unused.
+COPY --from=nginx-ratelimit \
+    /usr/lib/nginx/modules/ngx_http_ratelimit_module.so \
+    /usr/lib/nginx/modules/ngx_http_ratelimit_module.so
 
 # Drop the default config; our nginx.conf.template does not include
 # /etc/nginx/conf.d/*.conf.
