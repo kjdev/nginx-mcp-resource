@@ -12,6 +12,7 @@ helps pick a pattern.
 | Embed into an existing nginx | RFC 7662 introspection | [Bare nginx + Introspection](#bare-nginx--introspection) |
 | Run as a container | JWT verification | [Docker Compose + JWT](#docker-compose--jwt) |
 | Run as a container | RFC 7662 introspection | [Docker Compose + Introspection](#docker-compose--introspection) |
+| Run as a container | RFC 7662 introspection + per-subject rate limiting | [Docker Compose + Introspection + Rate limiting](#docker-compose--introspection--rate-limiting) |
 
 Choosing between JWT and introspection depends on what the AS issues; see
 [INSTALL.md](INSTALL.md#choosing-an-auth-mode).
@@ -285,6 +286,120 @@ docker compose -f examples/compose.introspect.yml up
 through an environment variable is unsupported (it would leak via
 `docker inspect`). See
 [SECURITY.md](SECURITY.md#8-handle-the-client-secret-carefully-introspection-mode-only).
+
+## Docker Compose + Introspection + Rate limiting
+
+Complete file: [`examples/compose.ratelimit.yml`](../examples/compose.ratelimit.yml).
+
+Adds per-subject rate limiting via
+[nginx-ratelimit](https://github.com/kjdev/nginx-ratelimit) on top of the
+introspection setup above, keyed on the authenticated subject
+(`$oauth2_token_sub`). Opt-in (`MCP_RATELIMIT_ENABLED=off` by default).
+`jwt` mode is supported the same way, keyed on the `sub` claim instead
+(requires `nginx-auth-jwt` >= 0.14.2 — see the bare nginx example below).
+
+### Prerequisites
+
+Same as [Docker Compose + Introspection](#docker-compose--introspection),
+plus a reachable Redis/Valkey instance (the compose file starts one as the
+`redis` service).
+
+### Run
+
+```sh
+docker compose -f examples/compose.ratelimit.yml up --build
+```
+
+### Rate limiting environment variables
+
+| Variable | Example | Required |
+|---|---|---|
+| `MCP_RATELIMIT_ENABLED` | `on` | yes (opt-in, default `off`) |
+| `MCP_RATELIMIT_REDIS` | `redis:6379` | yes (when `on`) |
+| `MCP_RATELIMIT_RATE` | `100r/m` | yes (when `on`) |
+| `MCP_RATELIMIT_BURST` | `20` | no |
+| `MCP_RATELIMIT_ALGO` | `fixed_window` | no (default `fixed_window`) |
+| `MCP_RATELIMIT_ON_ERROR` | `deny` | no (default `deny`, fail-close) |
+| `MCP_RATELIMIT_REDIS_PASSWORD_FILE` | `/run/secrets/redis.secret` | no |
+
+### Bare nginx equivalent
+
+The container's generated config follows this pattern; adapt it directly if
+embedding into an existing nginx instead:
+
+```nginx
+# nginx-ratelimit must be load_module'd BEFORE the auth module: dynamic
+# modules run their PREACCESS phase handler in the reverse order they are
+# registered, so loading ratelimit first makes auth_oauth2_token's handler
+# run first and populate $oauth2_token_sub before ratelimit reads it.
+load_module /usr/lib/nginx/modules/ngx_http_ratelimit_module.so;
+load_module /usr/lib/nginx/modules/ngx_http_auth_oauth2_token_module.so;
+
+http {
+    upstream mcp_ratelimit_redis {
+        server redis:6379;
+        keepalive 32;
+    }
+    ratelimit_zone mcp_peruser key=$oauth2_token_sub rate=100r/m burst=20 algo=fixed_window;
+
+    server {
+        location /mcp {
+            # Move introspection into PREACCESS so $oauth2_token_sub is
+            # resolved before nginx-ratelimit's PREACCESS handler runs
+            # (requires nginx-auth-oauth2-token >= 0.5.0).
+            auth_oauth2_token_phase preaccess;
+
+            include conf/mcp-resource-introspect.conf;
+            ratelimit zone=mcp_peruser;
+            ratelimit_pass mcp_ratelimit_redis;
+            ratelimit_headers on;
+            ratelimit_on_error deny;
+
+            proxy_set_header Authorization "";
+            proxy_pass http://mcp_backend;
+        }
+    }
+}
+```
+
+For `jwt` mode, key on the `sub` claim instead and move JWT validation into
+PREACCESS (requires `nginx-auth-jwt` >= 0.14.2):
+
+```nginx
+load_module /usr/lib/nginx/modules/ngx_http_ratelimit_module.so;
+load_module /usr/lib/nginx/modules/ngx_http_auth_jwt_module.so;
+
+http {
+    auth_jwt_claim_set $jwt_sub sub;
+
+    upstream mcp_ratelimit_redis {
+        server redis:6379;
+        keepalive 32;
+    }
+    ratelimit_zone mcp_peruser key=$jwt_sub rate=100r/m burst=20 algo=fixed_window;
+
+    server {
+        location /mcp {
+            # Move JWT validation into PREACCESS so $jwt_sub is resolved
+            # before nginx-ratelimit's PREACCESS handler runs (requires
+            # nginx-auth-jwt >= 0.14.2).
+            auth_jwt_phase preaccess;
+
+            include conf/mcp-resource-jwt.conf;
+            ratelimit zone=mcp_peruser;
+            ratelimit_pass mcp_ratelimit_redis;
+            ratelimit_headers on;
+            ratelimit_on_error deny;
+
+            proxy_set_header Authorization "";
+            proxy_pass http://mcp_backend;
+        }
+    }
+}
+```
+
+See [SECURITY.md](SECURITY.md#10-rate-limiting-fail-close-behaviour-optional)
+for the fail-close default and the empty-key caveat.
 
 ## Smoke testing the running RS
 

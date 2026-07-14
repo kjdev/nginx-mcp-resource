@@ -1,0 +1,69 @@
+# nginx-mcp-resource (Introspection mode + per-subject rate limiting) docker
+# compose example.
+#
+# Rate limiting keys on the authenticated subject ($oauth2_token_sub in
+# introspect mode). `jwt` mode is supported the same way, keyed on the `sub`
+# claim instead (requires nginx-auth-jwt >= 0.14.2) -- see
+# docs/EXAMPLES.md#docker-compose--introspection--rate-limiting for the jwt
+# equivalent.
+#
+# Prerequisites:
+#   - Write the AS-issued client secret as a single line into ./secrets/rs.secret.
+#   - Ensure the upstream MCP backend is reachable at 127.0.0.1:8080
+#     (override MCP_BACKEND if it lives elsewhere).
+#   - If MCP_INTROSPECT_ENDPOINT is an external FQDN, also set MCP_RESOLVER
+#     (e.g. the in-container DNS 127.0.0.11).
+#
+# Run:
+#   docker compose -f examples/compose.ratelimit.yml up --build
+#
+# Assumes TLS termination is handled upstream (ALB / ingress / reverse proxy).
+
+services:
+  mcp-resource:
+    build:
+      context: ..
+      dockerfile: ./Dockerfile
+    ports:
+      - "8443:80"
+    environment:
+      # === Auth mode ===
+      MCP_AUTH_MODE: introspect
+      MCP_TLS: "off"
+
+      # === Common required ===
+      MCP_SERVER_NAME: mcp.example.com
+      MCP_CANONICAL_URI: https://mcp.example.com/mcp
+      MCP_METADATA_URI: https://mcp.example.com/.well-known/oauth-protected-resource
+      MCP_AUTHORIZATION_SERVER: https://auth.example.com
+      MCP_REQUIRED_SCOPE: mcp:read
+      MCP_SCOPES_SUPPORTED: mcp:read,mcp:write
+      MCP_BACKEND: host.docker.internal:8080
+
+      # === Introspection mode-specific ===
+      MCP_INTROSPECT_ENDPOINT: https://auth.example.com/oauth2/introspect
+      MCP_CLIENT_ID: mcp-rs
+      MCP_CLIENT_SECRET_FILE: /run/secrets/rs.secret
+
+      # AS is on an external FQDN, so specify a DNS resolver (Docker's default DNS).
+      MCP_RESOLVER: 127.0.0.11
+
+      # === Rate limiting (opt-in) ===
+      MCP_RATELIMIT_ENABLED: "on"
+      MCP_RATELIMIT_REDIS: redis:6379
+      MCP_RATELIMIT_RATE: 100r/m
+      MCP_RATELIMIT_BURST: "20"
+    secrets:
+      - rs.secret
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - redis
+
+  redis:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+
+secrets:
+  rs.secret:
+    file: ./secrets/rs.secret

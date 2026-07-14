@@ -106,7 +106,30 @@ in production deployments.
 - For the container image, adjust the lifetime with
   `MCP_INTROSPECT_CACHE_MAX_TTL` (default `60s`).
 
-## 10. References
+## 10. Rate limiting fail-close behaviour (optional)
+
+`nginx-ratelimit` (`MCP_RATELIMIT_ENABLED=on`) keys per-subject rate limits
+on the authenticated subject, resolved in the PREACCESS phase: the `sub`
+claim (`$jwt_sub`, requires `nginx-auth-jwt` >= 0.14.2) in `jwt` mode, or
+`$oauth2_token_sub` (requires `nginx-auth-oauth2-token` >= 0.5.0) in
+`introspect` mode. Two failure modes to be aware of:
+
+- **Empty key = unlimited, silently.** If the key variable is empty (e.g.
+  the mode's PREACCESS-phase directive is missing so auth has not run yet,
+  or the token/introspection response has no `sub` claim), nginx-ratelimit
+  treats the empty key as unlimited rather than rejecting the request. Verify
+  with distinct subjects that they are independently rate-limited — if every
+  subject shares one counter (or none is ever limited), the key is empty.
+- **Redis unreachable defaults to fail-close.** `MCP_RATELIMIT_ON_ERROR=deny`
+  (the default) rejects requests when Redis cannot be reached, prioritizing
+  availability of the rate limit over availability of the service. Set
+  `MCP_RATELIMIT_ON_ERROR=allow` only if fail-open is an explicit,
+  accepted trade-off for your deployment.
+- `MCP_RATELIMIT_REDIS_PASSWORD_FILE`, unlike `MCP_CLIENT_SECRET_FILE`, is
+  read at startup and expanded into the generated `nginx.conf` in plaintext
+  (root-only). It is not kept as a file reference at runtime.
+
+## 11. References
 
 - MCP Authorization specification: <https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization>
 - RFC 8707 (Resource Indicators): <https://datatracker.ietf.org/doc/html/rfc8707>

@@ -125,6 +125,27 @@ http {
 | `MCP_CLIENT_SECRET_FILE` | Path to the client secret file (required). Passing the secret through an environment variable is unsupported. |
 | `MCP_INTROSPECT_CACHE_MAX_TTL` | Default `60s` |
 
+### Rate limiting (optional)
+
+Per-subject rate limiting via [nginx-ratelimit](https://github.com/kjdev/nginx-ratelimit),
+keyed on the authenticated subject against a Redis backend. Disabled by
+default. Supported in both auth modes: `jwt` keys on the `sub` claim
+(requires `nginx-auth-jwt` >= 0.14.2) and `introspect` keys on
+`$oauth2_token_sub` (requires `nginx-auth-oauth2-token` >= 0.5.0).
+
+| Variable | Default | Description |
+|------|--------|------|
+| `MCP_RATELIMIT_ENABLED` | `off` | `on` / `off` |
+| `MCP_RATELIMIT_REDIS` | — | Required when `on`. Redis `host:port` |
+| `MCP_RATELIMIT_RATE` | — | Required when `on`. `ratelimit_zone rate=` value (e.g. `100r/m`) |
+| `MCP_RATELIMIT_BURST` | (unset) | `ratelimit_zone burst=` value |
+| `MCP_RATELIMIT_ALGO` | `fixed_window` | `ratelimit_zone algo=` value |
+| `MCP_RATELIMIT_ON_ERROR` | `deny` | `deny` (fail-close) / `allow` (fail-open) when Redis is unreachable |
+| `MCP_RATELIMIT_REDIS_PASSWORD_FILE` | (unset) | Path to a file holding the Redis AUTH password. Unlike `MCP_CLIENT_SECRET_FILE`, this value is expanded into the generated `nginx.conf` at startup (root-only, not kept as a file reference) |
+
+See [`examples/compose.ratelimit.yml`](examples/compose.ratelimit.yml) for a
+runnable Docker Compose recipe.
+
 ## Documentation
 
 End-user reference documentation lives under [`docs/`](docs/):
@@ -164,7 +185,12 @@ scripts/lint-examples.sh
 ./test/e2e/run-e2e.sh all
 
 # Test::Nginx::Socket integration suite (point it at the built modules first).
+# TEST_NGINX_SERVROOT is required: Test::Nginx::Util defaults to the fixed
+# relative path `t/servroot`, which predates the test/prove/ layout and would
+# otherwise recreate a stray, untracked `t/` directory at the repo root.
 TEST_NGINX_LOAD_MODULES="/path/to/ngx_http_auth_jwt_module.so /path/to/ngx_http_auth_oauth2_token_module.so" \
+  TEST_NGINX_SERVROOT=/tmp/servroot \
+  TEST_NGINX_HTML_DIR=/tmp/servroot/html \
   prove -r test/prove
 ```
 

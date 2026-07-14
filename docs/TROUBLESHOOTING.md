@@ -229,6 +229,44 @@ above. The container image copies the required `.so` files at build time so
 this should not happen there; for bare nginx, follow [INSTALL.md](INSTALL.md)
 to rebuild.
 
+## Rate limiting
+
+### Symptom: rate limiting is silently unlimited for every subject
+
+**Cause**: `$oauth2_token_sub` is empty when `nginx-ratelimit` reads it as the
+key. nginx-ratelimit treats an empty key as unlimited rather than rejecting
+the request, so requests never get throttled and no error is logged. This
+happens when `auth_oauth2_token_phase preaccess;` is missing from the
+location (introspection still runs in the ACCESS phase, after ratelimit's
+PREACCESS handler), or the introspection response has no `sub` claim. In
+`jwt` mode, the cause is the equivalent: `auth_jwt_phase preaccess;` is
+missing from the `/mcp` location, `nginx-auth-jwt` is older than 0.14.2 (the
+version that made a successful PREACCESS check return `NGX_DECLINED` instead
+of `NGX_OK`, allowing ratelimit's handler to run afterwards), or the JWT has
+no `sub` claim.
+
+**Fix**: add the mode's PREACCESS-phase directive to the `/mcp` location —
+`auth_oauth2_token_phase preaccess;` (requires nginx-auth-oauth2-token
+>= 0.5.0) for `introspect`, or `auth_jwt_phase preaccess;` (requires
+nginx-auth-jwt >= 0.14.2) for `jwt`. Verify with two different valid tokens
+(different `sub`) that each is limited independently — if both share one
+counter, or neither is ever limited, the key is empty.
+
+### Symptom: ratelimit's PREACCESS handler doesn't seem to run, or runs before auth resolves the key
+
+**Cause**: nginx dynamic modules run their PREACCESS-phase handlers in the
+**reverse** order they are `load_module`'d. If the auth module
+(`ngx_http_auth_jwt_module.so` or `ngx_http_auth_oauth2_token_module.so`) is
+loaded *before* `ngx_http_ratelimit_module.so`, ratelimit's handler executes
+first, before the rate-limit key variable has been resolved.
+
+**Fix**: `load_module` nginx-ratelimit **before** the auth module, so that
+the auth module's handler (loaded later) runs first and populates the key
+variable before ratelimit's handler (loaded earlier) reads it. The container
+image derives this order automatically; for bare nginx, follow the
+`load_module` order shown in
+[EXAMPLES.md](EXAMPLES.md#docker-compose--introspection--rate-limiting).
+
 ## See also
 
 - Validation sections "V1–V4" in the developer guide
