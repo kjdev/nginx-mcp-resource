@@ -24,6 +24,7 @@ env:
   IMAGE: nginx-mcp-resource:dev
   JWT_MODULE: /usr/lib/nginx/modules/ngx_http_auth_jwt_module.so
   OAUTH2_MODULE: /usr/lib/nginx/modules/ngx_http_auth_oauth2_token_module.so
+  RATELIMIT_MODULE: /usr/lib/nginx/modules/ngx_http_ratelimit_module.so
 
 defaults:
   run:
@@ -91,6 +92,11 @@ jobs:
     # Opt-in job that runs only on manual dispatch (workflow_dispatch) with run_prove=true.
     if: github.event_name == 'workflow_dispatch' && inputs.run_prove
     runs-on: ubuntu-latest
+    services:
+      valkey:
+        image: valkey/valkey:8-alpine
+        ports:
+          - 6379:6379
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -106,18 +112,25 @@ jobs:
       # and run the full prove suite under test/prove/. Building XS deps needs
       # build-base/perl-dev. Keeping the costly perl toolchain confined here keeps
       # it out of the always-on job.
+      #
+      # --network host: the ratelimit suites (14/15) hard-code
+      # `server 127.0.0.1:6379;` in their nginx config, so the container must
+      # share the runner's network namespace to reach the valkey service,
+      # which Actions binds to the runner's own localhost rather than a
+      # Docker-network-visible hostname.
       - name: Run Test::Nginx suite inside the image
         run: |
           docker run --rm \
+            --network host \
             -v "$PWD:/work:ro" -w /work \
             -e TEST_NGINX_BINARY=/usr/sbin/nginx \
-            -e TEST_NGINX_LOAD_MODULES="$JWT_MODULE $OAUTH2_MODULE" \
+            -e TEST_NGINX_LOAD_MODULES="$RATELIMIT_MODULE $JWT_MODULE $OAUTH2_MODULE" \
             -e TEST_NGINX_SERVROOT=/tmp/servroot \
             -e TEST_NGINX_HTML_DIR=/tmp/servroot/html \
             --init \
             "$IMAGE" \
             sh -c '
-              apk add --no-cache perl perl-app-cpanminus perl-dev make build-base openssl bash >/dev/null &&
+              apk add --no-cache perl perl-app-cpanminus perl-dev make build-base openssl bash redis >/dev/null &&
               cpanm --notest --quiet Test::Nginx::Socket > /dev/null &&
               mkdir -p /tmp/servroot/html &&
               prove -r test/prove
