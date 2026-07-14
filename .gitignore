@@ -3,3 +3,6 @@
 
 # Smoke test fixtures generated at runtime
 /test/smoke/fixtures/
+
+# Local dummy secrets for manual compose testing
+/examples/secrets/
