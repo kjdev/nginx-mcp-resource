@@ -7,6 +7,14 @@
 
 # The auth modules are always loaded; mode switching is handled by the
 # included snippets.
+#
+# nginx-ratelimit (opt-in via MCP_RATELIMIT_ENABLED) must be load_module'd
+# BEFORE the auth modules: dynamic modules run their PREACCESS phase handler
+# in the reverse order they are registered in cycle->modules, so loading
+# ratelimit first makes the active auth module's handler run first and
+# populate the rate-limit key ($jwt_sub for jwt, $oauth2_token_sub for
+# introspect) before ratelimit reads it.
+${MCP_RATELIMIT_LOAD_MODULE}
 load_module /usr/lib/nginx/modules/ngx_http_auth_jwt_module.so;
 load_module /usr/lib/nginx/modules/ngx_http_auth_oauth2_token_module.so;
 
@@ -47,6 +55,10 @@ http {
     # claim_set / map $jwt_scope|$oauth2_aud|$oauth2_scope / cache zone, etc.
     include /etc/nginx/snippets/mcp-http-${MCP_AUTH_MODE}.conf;
 
+    # === rate limiting (opt-in via MCP_RATELIMIT_ENABLED) ================
+    # redis upstream + ratelimit_zone, or empty when disabled.
+    include /etc/nginx/snippets/mcp-ratelimit-http-${MCP_RATELIMIT_ENABLED}.conf;
+
     # === Upstream backend ===============================================
     upstream mcp_backend {
         server ${MCP_BACKEND};
@@ -73,6 +85,10 @@ http {
         # === MCP resource endpoint =======================================
         location ${MCP_RESOURCE_PATH} {
             include /etc/nginx/mcp-conf/mcp-resource-${MCP_AUTH_MODE}.conf;
+
+            # Per-subject rate limiting (opt-in via MCP_RATELIMIT_ENABLED).
+            # Empty when disabled.
+            include /etc/nginx/snippets/mcp-ratelimit-location-${MCP_RATELIMIT_ENABLED}.conf;
 
             # Do not pass the token upstream (prevents RFC 8707 token passthrough)
             proxy_set_header Authorization "";

@@ -1,0 +1,2 @@
+# Rate limiting is disabled (MCP_RATELIMIT_ENABLED=off, the default). No
+# upstream / ratelimit_zone is declared.

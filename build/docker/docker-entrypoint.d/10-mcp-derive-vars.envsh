@@ -28,6 +28,9 @@ export MCP_RESOURCE_PATH="${MCP_RESOURCE_PATH:-/mcp}"
 export MCP_BEARER_METHODS_SUPPORTED="${MCP_BEARER_METHODS_SUPPORTED:-header}"
 export MCP_WORKER_PROCESSES="${MCP_WORKER_PROCESSES:-auto}"
 export MCP_INTROSPECT_CACHE_MAX_TTL="${MCP_INTROSPECT_CACHE_MAX_TTL:-60s}"
+export MCP_RATELIMIT_ENABLED="${MCP_RATELIMIT_ENABLED:-off}"
+export MCP_RATELIMIT_ALGO="${MCP_RATELIMIT_ALGO:-fixed_window}"
+export MCP_RATELIMIT_ON_ERROR="${MCP_RATELIMIT_ON_ERROR:-deny}"
 
 # === resolver directive ===================================================
 # Emit `resolver <addr>;` only when set; otherwise an empty string (the
@@ -36,6 +39,51 @@ if [ -n "${MCP_RESOLVER-}" ]; then
     export MCP_RESOLVER_DIRECTIVE="resolver $MCP_RESOLVER;"
 else
     export MCP_RESOLVER_DIRECTIVE=""
+fi
+
+# === rate limiting derived values (opt-in, MCP_RATELIMIT_ENABLED) =========
+# load_module: only emitted when enabled. Must precede the auth modules'
+# load_module lines in nginx.conf.template (see the comment there for why).
+if [ "$MCP_RATELIMIT_ENABLED" = "on" ]; then
+    export MCP_RATELIMIT_LOAD_MODULE="load_module /usr/lib/nginx/modules/ngx_http_ratelimit_module.so;"
+else
+    export MCP_RATELIMIT_LOAD_MODULE=""
+fi
+
+# ratelimit_zone burst=N argument, only when MCP_RATELIMIT_BURST is set.
+if [ -n "${MCP_RATELIMIT_BURST-}" ]; then
+    export MCP_RATELIMIT_BURST_ARG=" burst=$MCP_RATELIMIT_BURST"
+else
+    export MCP_RATELIMIT_BURST_ARG=""
+fi
+
+# ratelimit_password directive, only when a Redis AUTH secret file is given.
+if [ -n "${MCP_RATELIMIT_REDIS_PASSWORD_FILE-}" ]; then
+    MCP_RATELIMIT_REDIS_PASSWORD=$(cat "$MCP_RATELIMIT_REDIS_PASSWORD_FILE") \
+        || die "failed to read MCP_RATELIMIT_REDIS_PASSWORD_FILE"
+    export MCP_RATELIMIT_PASSWORD_DIRECTIVE="ratelimit_password $MCP_RATELIMIT_REDIS_PASSWORD;"
+else
+    export MCP_RATELIMIT_PASSWORD_DIRECTIVE=""
+fi
+
+# rate-limit key variable and the PREACCESS-phase directive that resolves it,
+# both mode-dependent: jwt keys on the `sub` claim (exposed as $jwt_sub by
+# mcp-http-jwt.conf.template), introspect keys on the module-builtin
+# $oauth2_token_sub.
+if [ "$MCP_RATELIMIT_ENABLED" = "on" ]; then
+    case "$MCP_AUTH_MODE" in
+        jwt)
+            export MCP_RATELIMIT_KEY='$jwt_sub'
+            export MCP_RATELIMIT_PHASE_DIRECTIVE="auth_jwt_phase preaccess;"
+            ;;
+        introspect)
+            export MCP_RATELIMIT_KEY='$oauth2_token_sub'
+            export MCP_RATELIMIT_PHASE_DIRECTIVE="auth_oauth2_token_phase preaccess;"
+            ;;
+    esac
+else
+    export MCP_RATELIMIT_KEY=""
+    export MCP_RATELIMIT_PHASE_DIRECTIVE=""
 fi
 
 # === JSON-encode the canonical URI (used for the JWT aud comparison) ======
@@ -100,4 +148,4 @@ else
     printf '%s' "http"  > /run/mcp.proto
 fi
 
-echo "[mcp-entrypoint] derived: listen=$MCP_LISTEN_PORT scope_re=$MCP_REQUIRED_SCOPE_RE"
+echo "[mcp-entrypoint] derived: listen=$MCP_LISTEN_PORT scope_re=$MCP_REQUIRED_SCOPE_RE ratelimit=$MCP_RATELIMIT_ENABLED"

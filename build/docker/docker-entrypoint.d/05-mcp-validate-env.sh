@@ -68,4 +68,23 @@ case "$MCP_AUTH_MODE" in
         ;;
 esac
 
-echo "[mcp-entrypoint] env validation OK (mode=$MCP_AUTH_MODE, tls=${MCP_TLS:-off})"
+# === Rate limiting (opt-in) ===============================================
+case "${MCP_RATELIMIT_ENABLED:-off}" in
+    on)
+        require MCP_RATELIMIT_REDIS
+        require MCP_RATELIMIT_RATE
+        case "${MCP_RATELIMIT_ON_ERROR:-deny}" in
+            deny|allow) ;;
+            *) die "MCP_RATELIMIT_ON_ERROR must be 'deny' or 'allow' (got: $MCP_RATELIMIT_ON_ERROR)" ;;
+        esac
+        if [ -n "${MCP_RATELIMIT_REDIS_PASSWORD_FILE-}" ]; then
+            require_file MCP_RATELIMIT_REDIS_PASSWORD_FILE
+        fi
+        ;;
+    off) ;;
+    *)
+        die "MCP_RATELIMIT_ENABLED must be 'on' or 'off' (got: $MCP_RATELIMIT_ENABLED)"
+        ;;
+esac
+
+echo "[mcp-entrypoint] env validation OK (mode=$MCP_AUTH_MODE, tls=${MCP_TLS:-off}, ratelimit=${MCP_RATELIMIT_ENABLED:-off})"

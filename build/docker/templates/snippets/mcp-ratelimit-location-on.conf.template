@@ -1,0 +1,15 @@
+# location-level config for per-subject rate limiting (MCP_RATELIMIT_ENABLED=on)
+#
+# ${MCP_RATELIMIT_PHASE_DIRECTIVE} moves auth into the PREACCESS phase so the
+# rate-limit key (jwt: $jwt_sub, requires nginx-auth-jwt >= 0.14.2;
+# introspect: $oauth2_token_sub, requires nginx-auth-oauth2-token >= 0.5.0)
+# is resolved before nginx-ratelimit's PREACCESS handler reads it (see
+# mcp-ratelimit-http-on.conf.template for the load_module ordering this
+# depends on).
+${MCP_RATELIMIT_PHASE_DIRECTIVE}
+
+ratelimit zone=mcp_peruser;
+ratelimit_pass mcp_ratelimit_redis;
+ratelimit_headers on;
+ratelimit_on_error ${MCP_RATELIMIT_ON_ERROR};
+${MCP_RATELIMIT_PASSWORD_DIRECTIVE}

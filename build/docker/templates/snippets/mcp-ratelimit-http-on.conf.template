@@ -1,0 +1,14 @@
+# http-level config for per-subject rate limiting (MCP_RATELIMIT_ENABLED=on)
+#
+# - upstream: Redis/Valkey reached over ngx_http_upstream (nginx-ratelimit
+#   has no hiredis dependency; RESP is encoded/decoded in-module)
+# - ratelimit_zone: keyed on ${MCP_RATELIMIT_KEY}, the subject claim or
+#   introspection result depending on mode ($jwt_sub for jwt,
+#   $oauth2_token_sub for introspect), resolved in the PREACCESS phase by
+#   ${MCP_RATELIMIT_PHASE_DIRECTIVE} (see mcp-ratelimit-location-on.conf.template)
+upstream mcp_ratelimit_redis {
+    server ${MCP_RATELIMIT_REDIS};
+    keepalive 32;
+}
+
+ratelimit_zone mcp_peruser key=${MCP_RATELIMIT_KEY} rate=${MCP_RATELIMIT_RATE}${MCP_RATELIMIT_BURST_ARG} algo=${MCP_RATELIMIT_ALGO};
