@@ -58,10 +58,22 @@ else
 fi
 
 # ratelimit_password directive, only when a Redis AUTH secret file is given.
+# The password is embedded verbatim into the generated nginx.conf, so it must
+# be quoted for nginx's config-file syntax, not just wrapped in shell quotes.
+# `ratelimit_password` is a plain ngx_conf_set_str_slot (no complex-value /
+# variable compilation), so `$` needs no escaping there; only the two escapes
+# nginx's config tokenizer recognizes inside a single-quoted string matter:
+# backslash (must go first, or the escapes added below get re-escaped) and
+# the enclosing single quote itself.
 if [ -n "${MCP_RATELIMIT_REDIS_PASSWORD_FILE-}" ]; then
     MCP_RATELIMIT_REDIS_PASSWORD=$(cat "$MCP_RATELIMIT_REDIS_PASSWORD_FILE") \
         || die "failed to read MCP_RATELIMIT_REDIS_PASSWORD_FILE"
-    export MCP_RATELIMIT_PASSWORD_DIRECTIVE="ratelimit_password $MCP_RATELIMIT_REDIS_PASSWORD;"
+    MCP_RATELIMIT_REDIS_PASSWORD_ESCAPED=$(
+        printf '%s' "$MCP_RATELIMIT_REDIS_PASSWORD" | sed \
+            -e 's/\\/\\\\/g' \
+            -e "s/'/\\\\'/g"
+    ) || die "failed to escape MCP_RATELIMIT_REDIS_PASSWORD"
+    export MCP_RATELIMIT_PASSWORD_DIRECTIVE="ratelimit_password '${MCP_RATELIMIT_REDIS_PASSWORD_ESCAPED}';"
 else
     export MCP_RATELIMIT_PASSWORD_DIRECTIVE=""
 fi
