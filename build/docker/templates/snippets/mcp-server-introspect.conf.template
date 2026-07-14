@@ -3,7 +3,17 @@
 # Provides the internal location that reverse-proxies to the AS RFC 7662
 # endpoint. client_id / client_secret_file require http scope, so they are
 # declared in mcp-http-introspect.conf.
+#
+# proxy_pass is given via a variable rather than the literal
+# ${MCP_INTROSPECT_ENDPOINT} value: a literal proxy_pass target is resolved
+# once at config-load time using the system resolver, completely bypassing
+# the `resolver` directive (MCP_RESOLVER). That turns a transient DNS hiccup,
+# or an AS host that isn't reachable yet at container startup, into a hard
+# `[emerg] host not found in upstream` that keeps nginx from starting at all.
+# Routing through a variable defers resolution to request time, so it goes
+# through `resolver` like the rest of this codebase's docs already assume.
 location = /_introspect {
     internal;
-    proxy_pass ${MCP_INTROSPECT_ENDPOINT};
+    set $mcp_introspect_upstream "${MCP_INTROSPECT_ENDPOINT}";
+    proxy_pass $mcp_introspect_upstream;
 }
