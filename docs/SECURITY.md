@@ -117,9 +117,18 @@ claim (`$jwt_sub`, requires `nginx-auth-jwt` >= 0.14.2) in `jwt` mode, or
 - **Empty key = unlimited, silently.** If the key variable is empty (e.g.
   the mode's PREACCESS-phase directive is missing so auth has not run yet,
   or the token/introspection response has no `sub` claim), nginx-ratelimit
-  treats the empty key as unlimited rather than rejecting the request. Verify
-  with distinct subjects that they are independently rate-limited — if every
-  subject shares one counter (or none is ever limited), the key is empty.
+  treats the empty key as unlimited rather than rejecting the request. The
+  container closes the "no `sub` claim" case automatically: it adds
+  `auth_jwt_require $jwt_sub;` (`jwt` mode) or `auth_oauth2_token_require
+  $oauth2_token_sub;` (`introspect` mode) to the `/mcp` location whenever
+  `MCP_RATELIMIT_ENABLED=on`, rejecting subject-less tokens with `401` before
+  ratelimit's handler ever sees an empty key. For bare nginx, add the
+  equivalent `require` directive yourself — see
+  [EXAMPLES.md](EXAMPLES.md#docker-compose--introspection--rate-limiting).
+  The missing-PREACCESS-phase-directive case is not covered by this and must
+  still be verified: with distinct subjects that they are independently
+  rate-limited — if every subject shares one counter (or none is ever
+  limited), the key is empty.
 - **Redis unreachable defaults to fail-close.** `MCP_RATELIMIT_ON_ERROR=deny`
   (the default) rejects requests when Redis cannot be reached, prioritizing
   availability of the rate limit over availability of the service. Set

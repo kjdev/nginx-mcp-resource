@@ -133,6 +133,11 @@ default. Supported in both auth modes: `jwt` keys on the `sub` claim
 (requires `nginx-auth-jwt` >= 0.14.2) and `introspect` keys on
 `$oauth2_token_sub` (requires `nginx-auth-oauth2-token` >= 0.5.0).
 
+When enabled, the container requires the `sub` claim/field to be present:
+a token or introspection response without it is rejected with `401` rather
+than being treated as unlimited (see
+[SECURITY.md](docs/SECURITY.md#10-rate-limiting-fail-close-behaviour-optional)).
+
 | Variable | Default | Description |
 |------|--------|------|
 | `MCP_RATELIMIT_ENABLED` | `off` | `on` / `off` |

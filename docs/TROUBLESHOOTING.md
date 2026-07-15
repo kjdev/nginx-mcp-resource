@@ -252,6 +252,15 @@ nginx-auth-jwt >= 0.14.2) for `jwt`. Verify with two different valid tokens
 (different `sub`) that each is limited independently — if both share one
 counter, or neither is ever limited, the key is empty.
 
+For the container image, the missing-`sub`-claim case is closed
+automatically: whenever `MCP_RATELIMIT_ENABLED=on`, the generated config adds
+`auth_oauth2_token_require $oauth2_token_sub;` (or `auth_jwt_require
+$jwt_sub;` in `jwt` mode) to the `/mcp` location, so a token/response without
+`sub` gets `401` instead of silently bypassing the limit. This only covers
+the missing-`sub`-claim case, not the missing-PREACCESS-phase-directive case
+above. For bare nginx, add the equivalent `require` directive yourself — see
+[EXAMPLES.md](EXAMPLES.md#docker-compose--introspection--rate-limiting).
+
 ### Symptom: ratelimit's PREACCESS handler doesn't seem to run, or runs before auth resolves the key
 
 **Cause**: nginx dynamic modules run their PREACCESS-phase handlers in the

@@ -350,6 +350,13 @@ http {
             auth_oauth2_token_phase preaccess;
 
             include conf/mcp-resource-introspect.conf;
+
+            # Reject with 401 when the introspection response has no `sub`
+            # field. Otherwise nginx-ratelimit treats the resulting empty
+            # key as unlimited, letting subject-less tokens bypass the
+            # rate limit entirely.
+            auth_oauth2_token_require $oauth2_token_sub;
+
             ratelimit zone=mcp_peruser;
             ratelimit_pass mcp_ratelimit_redis;
             ratelimit_headers on;
@@ -386,6 +393,12 @@ http {
             auth_jwt_phase preaccess;
 
             include conf/mcp-resource-jwt.conf;
+
+            # Reject with 401 when the JWT has no `sub` claim. Otherwise
+            # nginx-ratelimit treats the resulting empty key as unlimited,
+            # letting subject-less tokens bypass the rate limit entirely.
+            auth_jwt_require $jwt_sub;
+
             ratelimit zone=mcp_peruser;
             ratelimit_pass mcp_ratelimit_redis;
             ratelimit_headers on;
