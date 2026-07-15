@@ -31,7 +31,7 @@ __DATA__
         server 127.0.0.1:6379;
         keepalive 32;
     }
-    ratelimit_zone mcp_peruser_a key=$jwt_sub requests=1 period=1m;
+    ratelimit_zone mcp_peruser_a key=$jwt_sub rate=1r/m algo=fixed_window;
 
     server {
         listen 18160;
@@ -107,7 +107,7 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6InRlc3QxIn0.ey
         server 127.0.0.1:6379;
         keepalive 32;
     }
-    ratelimit_zone mcp_peruser_a key=$jwt_sub requests=1 period=1m;
+    ratelimit_zone mcp_peruser_a key=$jwt_sub rate=1r/m algo=fixed_window;
 
     server {
         listen 18161;
@@ -181,7 +181,7 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6InRlc3QxIn0.ey
         server 127.0.0.1:6379;
         keepalive 32;
     }
-    ratelimit_zone mcp_peruser_c key=$jwt_sub requests=1 period=1m;
+    ratelimit_zone mcp_peruser_c key=$jwt_sub rate=1r/m algo=fixed_window;
 
     server {
         listen 18162;
@@ -255,7 +255,7 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6InRlc3QxIn0.ey
         server 127.0.0.1:6379;
         keepalive 32;
     }
-    ratelimit_zone mcp_peruser_d key=$jwt_sub requests=1 period=1m;
+    ratelimit_zone mcp_peruser_d key=$jwt_sub rate=1r/m algo=fixed_window;
 
     server {
         listen 18163;

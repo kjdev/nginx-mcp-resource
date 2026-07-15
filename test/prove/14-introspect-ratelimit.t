@@ -38,7 +38,7 @@ __DATA__
         server 127.0.0.1:6379;
         keepalive 32;
     }
-    ratelimit_zone mcp_peruser_a key=$oauth2_token_sub requests=1 period=1m;
+    ratelimit_zone mcp_peruser_a key=$oauth2_token_sub rate=1r/m algo=fixed_window;
 
     server {
         listen 18150;
@@ -125,7 +125,7 @@ Authorization: Bearer some-opaque-token
         server 127.0.0.1:6379;
         keepalive 32;
     }
-    ratelimit_zone mcp_peruser_a key=$oauth2_token_sub requests=1 period=1m;
+    ratelimit_zone mcp_peruser_a key=$oauth2_token_sub rate=1r/m algo=fixed_window;
 
     server {
         listen 18152;
@@ -210,7 +210,7 @@ Authorization: Bearer some-opaque-token
         server 127.0.0.1:6379;
         keepalive 32;
     }
-    ratelimit_zone mcp_peruser_c key=$oauth2_token_sub requests=1 period=1m;
+    ratelimit_zone mcp_peruser_c key=$oauth2_token_sub rate=1r/m algo=fixed_window;
 
     server {
         listen 18154;
@@ -295,7 +295,7 @@ Authorization: Bearer some-opaque-token
         server 127.0.0.1:6379;
         keepalive 32;
     }
-    ratelimit_zone mcp_peruser_d key=$oauth2_token_sub requests=1 period=1m;
+    ratelimit_zone mcp_peruser_d key=$oauth2_token_sub rate=1r/m algo=fixed_window;
 
     server {
         listen 18156;
