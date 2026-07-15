@@ -82,20 +82,31 @@ fi
 # both mode-dependent: jwt keys on the `sub` claim (exposed as $jwt_sub by
 # mcp-http-jwt.conf.template), introspect keys on the module-builtin
 # $oauth2_token_sub.
+#
+# MCP_RATELIMIT_SUBJECT_REQUIRE_DIRECTIVE rejects the request with 401 when
+# that key is empty (e.g. the token/introspection response has no `sub`
+# claim). Without this, nginx-ratelimit treats an empty key as unlimited
+# rather than rejecting, letting subject-less tokens bypass rate limiting
+# entirely (see issues/005-jwt-missing-sub-bypasses-ratelimit.md). Scoped to
+# MCP_RATELIMIT_ENABLED=on only -- subject-less tokens are otherwise a valid
+# case when rate limiting is not in use.
 if [ "$MCP_RATELIMIT_ENABLED" = "on" ]; then
     case "$MCP_AUTH_MODE" in
         jwt)
             export MCP_RATELIMIT_KEY='$jwt_sub'
             export MCP_RATELIMIT_PHASE_DIRECTIVE="auth_jwt_phase preaccess;"
+            export MCP_RATELIMIT_SUBJECT_REQUIRE_DIRECTIVE='auth_jwt_require $jwt_sub;'
             ;;
         introspect)
             export MCP_RATELIMIT_KEY='$oauth2_token_sub'
             export MCP_RATELIMIT_PHASE_DIRECTIVE="auth_oauth2_token_phase preaccess;"
+            export MCP_RATELIMIT_SUBJECT_REQUIRE_DIRECTIVE='auth_oauth2_token_require $oauth2_token_sub;'
             ;;
     esac
 else
     export MCP_RATELIMIT_KEY=""
     export MCP_RATELIMIT_PHASE_DIRECTIVE=""
+    export MCP_RATELIMIT_SUBJECT_REQUIRE_DIRECTIVE=""
 fi
 
 # === JSON-encode the canonical URI (used for the JWT aud comparison) ======

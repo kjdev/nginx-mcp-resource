@@ -8,6 +8,11 @@
 # depends on).
 ${MCP_RATELIMIT_PHASE_DIRECTIVE}
 
+# Reject with 401 when the rate-limit key is empty (no `sub` claim/response
+# field). Otherwise nginx-ratelimit treats an empty key as unlimited,
+# letting subject-less tokens bypass rate limiting entirely.
+${MCP_RATELIMIT_SUBJECT_REQUIRE_DIRECTIVE}
+
 ratelimit zone=mcp_peruser;
 ratelimit_pass mcp_ratelimit_redis;
 ratelimit_headers on;
